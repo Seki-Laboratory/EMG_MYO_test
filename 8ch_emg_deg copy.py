@@ -8,6 +8,7 @@ from msvcrt import getch
 import cv2
 import matplotlib.pyplot as plt
 import winsound
+import serial
 
 
 #Emgクラス　サンプリング周波数200でデータを取得するクラス
@@ -24,26 +25,48 @@ class Emg(myo.DeviceListener):
     self.label = int(0)
     self.stop = 0
     # print("ジェスチャ",self.label,"の学習データを取得します。")
+    self.ser = serial.Serial('COM11', 115200) 
+
   
   def on_connected(self, event):
       event.device.stream_emg(True)
 
   def on_emg(self,event):
     self.emg = np.array(event.emg)**2
+    # self.ser.flush()
+    # self.ser.flushInput()
+    # self.ser.flushOutput()
+    self.ser.write(b"1")
+    a = self.ser.readline() 
+    ad = a.decode('utf-8')
+    line=ad.split(',')
+    self.value=[int(line[0]),int(line[1]),int(line[2]),int(line[3]),int(line[4])]
+    print(self.value)
+
+
+
+
+      
 #_____________Mode0_Moving_RMS_________________________
     if self.mode == 0:
       self.emg = np.reshape(self.emg,(1,8))
-      
+
+
       if self.add.shape[0] <= 21:
         self.add = np.append(self.add,self.emg,axis=0)
       else:
         self.add = np.delete(self.add, 1, 0)
-
         sum = np.sum(self.add[1:],axis=0)
         ave = sum/20
         sqrt = np.sqrt(ave)
         sqrt = np.round(sqrt, decimals=2)
-        print(sqrt)
+        # print(sqrt)
+
+        # print(self.value)
+
+
+
+
 
         # if self.i <= 19:
         #   with open('MRMSdata.csv', 'a') as f:
@@ -51,29 +74,39 @@ class Emg(myo.DeviceListener):
         #     writer.writerow(sqrt)
         #   self.i += 1
         if self.i <= self.n-1:
+
             with open('MRMSdata'+str(self.label)+'.csv', 'a') as f:
             #
             # with open('MRMSdata.csv', 'a') as f:
               writer = csv.writer(f, lineterminator='\n') # 行末は改行
               sqrt = np.append(sqrt,self.label)
+              sqrt = np.append(sqrt,self.value)
               writer.writerow(sqrt)
             self.i += 1
         elif self.i >= self.n:
             event.device.stream_emg(False)
             print("ジェスチャ",self.label,"の学習データを取得しました。  [続行 = Enter][終了 = Esc] ")
-
+ 
+           
             while True:
               key = ord(getch())
               if key == 13:
 
+
                 self.label += 1
                 print("ジェスチャ",self.label,"の学習データを取得します。")
+
                 event.device.stream_emg(True)
                 self.i = 0
+  
+
                 break
               elif key == 27:
                 print("学習データの取得終了します。")
                 self.stop = 1
+                self.ser.close()
+                
+                
                 break
 
  
@@ -148,10 +181,10 @@ def main():
   try:
 
     start = time.time()
-    while hub.run(listener.on_event, 5) :
+    while hub.run(listener.on_event, 100) :
       current = time.time()
       t = float(current - start)
-      print(t)
+      
       if listener.stop == 1 or not device:
         print("作業時間" ,t,"秒")
 
